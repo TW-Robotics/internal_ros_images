@@ -1,0 +1,158 @@
+ARG GRAPHICS_PLATFORM=opensource
+ARG PYTHONVER=3.12
+ARG ROS_DISTRO=jazzy
+ARG ROS2_WS=/opt/ros2_ws
+
+#############################################################
+##########          REAL BUILD STARTS HERE         ##########
+
+## Build container from specified source
+FROM ros_ml_container:baseimage
+LABEL org.opencontainers.image.source="https://github.com/TW-Robotics/internal_ros_images"
+
+ENV DEBIAN_FRONTEND="noninteractive"
+
+# Install mesa for GUI
+RUN apt-get update && apt-get install -q -y --no-install-recommends \
+    libgl1 libglx-mesa0
+
+ARG ROS2_WS
+ENV ROS2_WS=$ROS2_WS
+
+## Recreate ROS devel image
+# ------------------------
+# https://github.com/osrf/docker_images/blob/master/ros2/source/devel/Dockerfile
+# setup timezone
+RUN apt-get update && apt-get install -y locales \
+    && locale-gen en_US en_US.UTF-8 \
+    && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+
+ENV LANG=en_US.UTF-8
+
+RUN apt-get update && apt-get install -q -y --no-install-recommends \
+    software-properties-common curl \
+    && add-apt-repository universe
+
+RUN export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest | grep -F "tag_name" | awk -F\" '{print $4}') \
+    && curl -L -o /tmp/ros2-apt-source.deb "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo $VERSION_CODENAME)_all.deb"
+RUN apt-get install /tmp/ros2-apt-source.deb
+
+# install packages
+RUN apt-get update && apt-get install -q -y --no-install-recommends \
+    bash-completion \
+    dirmngr \
+    gnupg2 \
+    python3-argcomplete \
+    python3-flake8 \
+    python3-flake8-blind-except \
+    python3-flake8-builtins \
+    python3-flake8-class-newline \
+    python3-flake8-comprehensions \
+    python3-flake8-deprecated \
+    python3-flake8-docstrings \
+    python3-flake8-import-order \
+    python3-flake8-quotes \
+    python3-pip \
+    python3-pytest-cov \
+    python3-pytest-mock \
+    python3-pytest-repeat \
+    python3-pytest-rerunfailures \
+    python3-pytest-runner \
+    python3-pytest-timeout \
+    && rm -rf /var/lib/apt/lists/*
+
+# install bootstrap tools
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    build-essential \
+    git \
+    python3-colcon-common-extensions \
+    python3-colcon-mixin \
+    python3-rosdep \
+    python3-setuptools \
+    python3-vcstool \
+    && rm -rf /var/lib/apt/lists/*
+
+# This is a workaround for pytest not found causing builds to fail
+# Following RUN statements tests for regression of https://github.com/ros2/ros2/issues/722
+RUN pip3 freeze | grep pytest \
+    && python3 -m pytest --version
+
+# bootstrap rosdep
+RUN rosdep init \
+    && rosdep update
+
+# setup colcon mixin and metadata
+RUN colcon mixin add default \
+      https://raw.githubusercontent.com/colcon/colcon-mixin-repository/master/index.yaml && \
+    colcon mixin update && \
+    colcon metadata add default \
+      https://raw.githubusercontent.com/colcon/colcon-metadata-repository/master/index.yaml && \
+    colcon metadata update
+
+# clone source
+ENV ROS2_WS=/opt/ros2_ws
+RUN mkdir -p $ROS2_WS/src
+WORKDIR $ROS2_WS
+
+# build source
+RUN colcon \
+    build \
+    --cmake-args \
+      -DSECURITY=ON --no-warn-unused-cli \
+    --symlink-install
+
+# setup bashrc
+RUN cp /etc/skel/.bashrc ~/
+
+WORKDIR /
+## Official ROS image recreated
+# ------------------------
+
+# Set ROS and ignition versions and install them
+ARG ROS_DISTRO
+ENV ROS_DISTRO=${ROS_DISTRO}
+
+# Fully install ros2 instead of bootstrapping it and install rqt for debugging and rosbridge for web-based visualisation
+RUN apt-get update && apt-get install -q -y --no-install-recommends \
+    ros-$ROS_DISTRO-ros-desktop-full \
+    ros-dev-tools \
+    ros-$ROS_DISTRO-rqt* \
+    ros-$ROS_DISTRO-rosbridge-server \
+    ros-$ROS_DISTRO-ros-ign
+
+# Update os and ros packages to fix buggy opengl
+RUN apt-get update && apt-get upgrade -y
+
+# Install required python packages
+ADD ./requirements.txt .
+RUN pip3 install -r requirements.txt
+
+# Copy ROS packages for compilation in container
+COPY ./src $ROS2_WS/src
+
+# Install ros dependencies
+RUN apt-get update && rosdep update && rosdep install --from-paths $ROS2_WS/src -i -y --rosdistro $ROS_DISTRO
+
+# Compile workspace
+RUN /bin/bash -c "source /opt/ros/$ROS_DISTRO/setup.bash \
+    && cd $ROS2_WS \
+    && colcon build --symlink-install"
+
+# Remove src folder used for compilation, since the real src folder will be mounted at runtime
+RUN rm -rf $ROS2_WS/src
+
+# Cleanup
+RUN rm -rf /var/lib/apt/lists/*
+
+# Add ROS and venv sourcing to bashrc for interactive debugging
+RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
+RUN echo "source $ROS2_WS/install/local_setup.bash" >> ~/.bashrc
+RUN echo "source ~/myenv/bin/activate" >> ~/.bashrc
+
+# Set shell env variable for jupyterlab (this fixes autocompletion in web-based shell)
+ENV SHELL=/bin/bash
+
+# Add entrypoint
+ADD entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT [ "/entrypoint.sh" ]

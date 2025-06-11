@@ -1,0 +1,32 @@
+{"include": [
+
+    {
+        "TAG": "ros1_noetic_opensource",
+        "DOCKERFILE": "Dockerfile.ros1_noetic",
+        "BASE_DOCKERFILE": "Dockerfile.standard",
+        "BASEIMAGE" : "ubuntu:focal",
+        "ROS_DISTRO": "noetic",
+        "PYTHONVER" : "3.8",
+        "ROS2_WS" : "/catkin_ws"
+    },
+    
+    {
+        "TAG": "ros2_humble_opensource",
+        "DOCKERFILE": "Dockerfile.humble",
+        "BASE_DOCKERFILE": "Dockerfile.standard",
+        "BASEIMAGE": "ubuntu:jammy",
+        "ROS_DISTRO": "humble",
+        "PYTHONVER" : "3.10",
+        "ROS2_WS" : "/opt/ros2_ws"
+    },
+
+    {
+        "TAG": "ros2_jazzy_opensource",
+        "DOCKERFILE": "Dockerfile.jazzy",
+        "BASE_DOCKERFILE": "Dockerfile.standard",
+        "BASEIMAGE": "ubuntu:noble",
+        "ROS_DISTRO": "jazzy",
+        "PYTHONVER" : "3.12",
+        "ROS2_WS" : "/opt/ros2_ws"
+    }
+]}
