@@ -124,8 +124,24 @@ RUN apt-get update && apt-get install -q -y --no-install-recommends \
 RUN apt-get update && apt-get upgrade -y
 
 # Install required python packages
+RUN apt-get update && apt-get install -q -y --no-install-recommends python3-pip python3-venv
+RUN python3 -m venv ~/myenv
+
+# Upgrade to latest pip
+RUN /bin/bash -c "source ~/myenv/bin/activate \
+    && pip3 install --upgrade pip"
+
+# Install ros python prerequisites
+# Pytest is explicitly installed to handle the intel edgecase
+# Netifaces, pymongo and Pillow are installed for rosbridge
+RUN /bin/bash -c "source ~/myenv/bin/activate \
+    && pip3 install launchpadlib \
+    pyaml \
+    && pip3 install --upgrade setuptools"
+
 ADD ./requirements.txt .
-RUN pip3 install -r requirements.txt
+RUN /bin/bash -c "source ~/myenv/bin/activate \
+    && pip3 install -r requirements.txt"
 
 # Copy ROS packages for compilation in container
 COPY ./src $ROS2_WS/src

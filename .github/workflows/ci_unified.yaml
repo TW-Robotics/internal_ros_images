@@ -47,7 +47,7 @@ jobs:
     - name: "Build the Docker images"
       run: |
         echo "Building ${{ matrix.TAG }}"
-        IMAGE_TAG="ghcr.io/simonschwaiger/ros-ml-container:${{ matrix.TAG }}"
+        IMAGE_TAG="ghcr.io/tw-robotics/internal_ros_images:${{ matrix.TAG }}"
 
         mkdir src
         echo "jupyterlab" > requirements.txt
