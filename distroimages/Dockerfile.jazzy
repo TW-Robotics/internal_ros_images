@@ -114,7 +114,7 @@ ENV ROS_DISTRO=${ROS_DISTRO}
 
 # Fully install ros2 instead of bootstrapping it and install rqt for debugging and rosbridge for web-based visualisation
 RUN apt-get update && apt-get install -q -y --no-install-recommends \
-    ros-$ROS_DISTRO-ros-desktop \
+    ros-$ROS_DISTRO-desktop \
     ros-dev-tools \
     ros-$ROS_DISTRO-rqt* \
     ros-$ROS_DISTRO-rosbridge-server \
